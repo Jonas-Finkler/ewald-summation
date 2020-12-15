@@ -35,7 +35,7 @@ make
 ```
 
 ## Reference
-Most of this code was written during the development of our fourth generation neural network potential (4GHDNNP).
+Most of this code was written during the development of our fourth-generation high-dimensional neural network (4GHDNNP).
 I would therefore appreciate if you cite our paper in case you use this code in any academic work.
 
 Ko, Tsz Wai, et al.  
