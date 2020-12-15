@@ -142,9 +142,9 @@ program testEwaldSummation
     print*, 'Result obtained from dE=-sum(F*dx) (B):'
     print*, -1._dp * sum(disp * (f1+f2) / 2._dp)
     print*, 'Difference (A-B)'
-    print*, (e2 - e1) / (-1._dp * sum(disp * (f1+f2) / 2._dp))
-    print*, 'Ratio (A/B)'
     print*, (e2 - e1) - (-1._dp * sum(disp * (f1+f2) / 2._dp))
+    print*, 'Ratio (A/B)'
+    print*, (e2 - e1) / (-1._dp * sum(disp * (f1+f2) / 2._dp))
     print*, ''
 
 
