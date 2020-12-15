@@ -34,3 +34,11 @@ cmake -DOPENMP=ON -DDEBUG=OFF -DINTEL=OFF .. # compile with OpenMP parallelizati
 make
 ```
 
+## Reference
+Most of this code was written during the development of our fourth generation neural network potential (4GHDNNP).
+I would therefore appreciate if you cite our paper in case you use this code in any academic work.
+
+Ko, Tsz Wai, et al. 
+"A fourth-generation high-dimensional neural network potential with accurate electrostatics including non-local charge transfer." 
+arXiv preprint [arXiv:2009.06484](https://arxiv.org/abs/2009.06484) (2020).
+
