@@ -15,7 +15,7 @@ It takes the following arguments:
 * **sigma**: Array of dimension (nat) containing the standard deviations of the Gaussian shaped atomic charge distributions. If sigma(1) is < 0 point charges are used. 
 * **e**: Will contain the total electrostatic energy.
 * **f**: Array of dimension (3, nat) that will contain the atomic forces.
-* **stress**: Optional argument of dimension (3, 3) that will contain the stress tensor. 
+* **stress**: Optional argument of dimension (3, 3) that will contain the stress tensor. A subroutine (`dEdlatFromStress`) is included that allows to convert the stress tensor to the derivatives of the energy with respect to the lattice vectors. 
 
 In the file `src/configuration/parameters.f90` a constant called **ewaldSummationPrecision** is defined. 
 This number will be used to determine the Ewald splitting parameter (the size of the auxilary Gaussian charges used in the Ewald summation algorithm) as well as the real- and reciprocal-space cutoff in such a way that the total error of the energy calculated is roughly of that magnitude and optimal performance / scaling is achieved. 
