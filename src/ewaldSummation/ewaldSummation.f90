@@ -329,7 +329,7 @@ contains
 
     subroutine AmatrixReal(nat, ats, lat, sigma, hardness, eta, A)
         integer, intent(in) :: nat
-        real(dp), intent(in) :: ats(3,nat), lat(3,nat), sigma(nat), hardness(nat)
+        real(dp), intent(in) :: ats(3,nat), lat(3,3), sigma(nat), hardness(nat)
         real(dp), intent(in) :: eta
         real(dp), intent(out) :: A(nat, nat)
 
@@ -517,7 +517,7 @@ contains
 
     subroutine dAdxyzQrecip(nat, ats, lat, q, eta, dAdxyzQ)
         integer, intent(in) :: nat
-        real(dp), intent(in) :: ats(3,nat), lat(3,nat), q(nat)
+        real(dp), intent(in) :: ats(3,nat), lat(3,3), q(nat)
         real(dp), intent(in) :: eta
         real(dp), intent(out) :: dAdxyzQ(nat, 3, nat)
         real(dp) :: reclat(3,3), dlat(3), V, r, kri, krj, cutoff
