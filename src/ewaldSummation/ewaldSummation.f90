@@ -32,7 +32,7 @@ module ewaldSummation
     implicit none
     ! In RuNNer: ewaldalpha = 1 / (2 * eta)
     private
-    public :: ewaldEnergy,  eemMatrixEwald, eemdAdxyzTimesQEwald, dEdLatFromStress
+    public :: ewaldEnergy,  eemMatrixEwald, eemdAdxyzTimesQEwald, dEdLatFromStress, stressFromdEdLat, eemdAdlatTimesQEwald
 
 
 contains
@@ -90,6 +90,15 @@ contains
 
     end subroutine
 
+    subroutine stressFromdEdLat(lat, dEdlat, stress)
+        real(dp), intent(in) :: lat(3,3)
+        real(dp), intent(out) :: stress(3,3)
+        real(dp), intent(in) :: dEdlat(3,3)
+
+        stress = -1._dp / det3D(lat) * matmul(dEdlat, transpose(lat))
+
+    end subroutine
+
     ! gaussian charges (and also ewald gaussians) are of the form 1/(2*pi*sigma**2)**(3/2) * exp(-r**2/(2*sigma**2))
     ! -> sigma = sqrt(2) * alpha_{cent}
     subroutine ewaldEnergy(nat, ats, lat, q, sigma, e, f, stress)
@@ -121,7 +130,7 @@ contains
         f = freal + frecip
 
         if (present(stress)) then
-            stress = (stressreal + stressrecip) / det3D(lat)
+            stress = stressreal + stressrecip
         end if
 
     end subroutine ewaldEnergy
@@ -199,6 +208,7 @@ contains
         end do
         !$omp end parallel do
         e = e / 2._dp
+        stress = stress / abs(det3D(lat))
 
     end subroutine ewaldSumReal
 
@@ -214,7 +224,7 @@ contains
         real(dp), parameter :: unit(3,3) = reshape([1._dp, 0._dp, 0._dp, 0._dp, 1._dp, 0._dp, 0._dp, 0._dp, 1._dp], [3,3])
 
         call recLattice(lat, reclat)
-        V = det3D(lat)
+        V = abs(det3D(lat))
         e = 0._dp
         f = 0._dp
         stress = 0._dp
@@ -280,6 +290,7 @@ contains
         e =          e  / V * 4._dp * PI  / 2._dp
         f(:,:) = f(:,:) / V * 4._dp * PI  / 2._dp
         stress(:,:) = stress(:,:) / V * 4._dp * PI  / 2._dp
+        stress = stress / V
 
     end subroutine ewaldSumRecip
 
@@ -566,4 +577,188 @@ contains
         dAdxyzQ = dAdxyzQ / V * 4._dp * PI / 2._dp
     end subroutine dAdxyzQrecip
 
+    ! there is a dependence of A on eta. The partial derivative of this is not considered here since it cancels out when sum(q_i) == 0.
+    ! these routines are not optimized, but they work and are tested vs finite differences.
+    subroutine eemdAdlatTimesQEwald(nat, ats, lat, sigma, q, dAdlatQ)
+        integer, intent(in) :: nat
+        real(dp), intent(in) :: ats(3,nat), lat(3,3), sigma(nat), q(nat)
+        real(dp), intent(out) :: dAdlatQ(nat, 3, 3)
+        real(dp) :: tmp(nat, 3, 3), eta
+
+        eta = getOptimalEtaMatrix(lat) ! Elements of A should not depend on eta. No derivative dependence here.
+        eta = max(eta, maxval(sigma))
+
+        call dAdlatQReal(nat, ats, lat, sigma, q, eta, dAdlatQ)
+        call dAdLatQRecip(nat, ats, lat, q, eta, tmp)
+        dAdlatQ(:,:,:) = dAdlatQ(:,:,:) + tmp(:,:,:)
+
+    end subroutine eemdAdlatTimesQEwald
+
+    ! this does not take the dependence on eta into account. However it should cancel out with the reciprocal part
+    subroutine dAdlatQReal(nat, ats, lat, sigma, q, eta, dAdlatQ)
+        integer, intent(in) :: nat
+        real(dp), intent(in) :: ats(3,nat), lat(3,3), sigma(nat), q(nat)
+        real(dp), intent(in) :: eta
+        real(dp), intent(out) :: dAdLatQ(nat, 3, 3)
+
+        real(dp) ::  r, d(3), dlat(3), inv2eta, invsqrt2eta, gamma, interf, d2, cutoff
+        integer :: i, j, k, iat, jat,n(3),p
+        real(dp) :: invlat(3,3) !, relats(3,nat)
+        real(dp) :: dd2(3,3), drel(3), dr(3,3), dinterf(3,3)
+
+
+        dAdLatQ = 0._dp
+
+        call inv3DM(lat, invlat)
+        !relats = ats
+        !call toRelativeCoordinates(nat, lat, relats)
+
+        invsqrt2eta = 1._dp / (sqrt(2._dp) * eta)
+        inv2eta = 1._dp / (2._dp * eta)
+
+        !A = 0._dp
+
+        cutoff = getOptimalCutoffReal(eta, ewaldSummationPrecision)
+        call getNcells(lat, cutoff, n)
+
+        do iat=1,nat
+            do i=-n(1),n(1)
+                do j=-n(2),n(2)
+                    do k=-n(3),n(3)
+                        dlat(:) = i * lat(:,1) + j * lat(:,2) + k * lat(:,3)
+                        do jat=iat,nat
+                            if (i/=0 .or. j/=0 .or. k/=0 .or. iat/=jat) then
+                                d(:) = ats(:,iat) - ats(:,jat) + dlat(:) ! d/dx
+                                drel(:) = matmul(invlat, d) !
+                                d2 = sum(d**2) ! d2/dx =
+                                dd2(:,:) = 0._dp
+                                do p=1,3
+                                    !dd2(p,:) = drel(:) * 2._dp * d(p)
+                                    dd2(:,p) = drel(p) * 2._dp * d(:)
+                                end do
+                                if (d2 > cutoff**2) cycle
+                                r = sqrt(d2)
+                                dr(:,:) = 1._dp / (2._dp * r) * dd2(:,:)
+                                interf = erfc(r * invsqrt2eta)
+                                dinterf = -2._dp * invsqrt2eta * exp(-invsqrt2eta**2 * r**2) / sqrt(PI) * dr(:,:)
+
+                                if (sigma(1) > 0._dp) then
+                                    gamma = sqrt(sigma(iat)**2 + sigma(jat)**2) ! dgamma/dx=0
+                                    interf = interf - erfc(r / (sqrt(2._dp) * gamma))
+                                    dinterf = dinterf + 2._dp / (sqrt(2._dp) * gamma) &
+                                            * exp(-1._dp / (2._dp * gamma**2) * r**2) / sqrt(PI) * dr(:,:)
+                                end if
+                                dAdLatQ(iat,:,:) = dAdLatQ(iat,:,:) + q(jat) * (r * dinterf(:,:) - dr(:,:) * interf) / d2
+                                if (iat /= jat) then
+                                    dAdLatQ(jat,:,:) = dAdLatQ(jat,:,:) + q(iat) * (r * dinterf(:,:) - dr(:,:) * interf) / d2
+                                end if
+                                !A(iat, jat) = A(iat, jat) + interf / r
+                            end if
+                        end do
+                    end do
+                end do
+            end do
+        end do
+
+    end subroutine
+
+    subroutine dAdLatQRecip(nat, ats, lat, q, eta, dAdLatQ)
+        integer, intent(in) :: nat
+        real(dp), intent(in) :: ats(3,nat), lat(3,3)
+        real(dp), intent(in) :: q(nat)
+        real(dp), intent(in) :: eta
+        real(dp), intent(out) :: dAdLatQ(nat, 3, 3)
+        real(dp) :: reclat(3,3), dlat(3), V, r, kri, krj, cutoff
+        real(dp) :: factor
+        integer :: i, j, k, iat, jat, n(3), ii, jj
+        real(dp) :: invlat(3,3), invlatt(3,3), ddlat(3,3,3), dreclat(3,3,3,3), dr(3,3)
+        real(dp) :: dfactor(3,3), dkri(3,3), dkrj(3,3), relat(3), datsi(3,3,3), datsj(3,3,3), tmp(3,3), dV(3,3)
+
+        !        call inv3DM(transpose(lat), reclat)
+        !        reclat(:,:) = reclat(:,:) * (2._dp * PI )
+        call inv3DM(lat, invlat)
+        !call inv3DM(transpose(lat), invlatt)
+        invlatt = transpose(invlat)
+        !invlatt = invlatt ! dreclat_ij / dlat_kl =
+
+        call recLattice(lat, reclat)
+        V = det3D(lat)
+        dV = V * invlatt
+
+        dAdLatQ = 0._dp
+
+        cutoff = getOptimalCutoffRecip(eta, ewaldSummationPrecision)
+        call getNcells(reclat, cutoff, n)
+
+        do i=-n(1),n(1)
+            do j=-n(2),n(2)
+                do k=-n(3),n(3)
+                    if (i/=0 .or. j/=0 .or. k/=0) then
+                        dlat(:) = i * reclat(:,1) + j * reclat(:,2) + k * reclat(:,3)
+                        do ii=1,3
+                            do jj=1,3
+                                dreclat(:,:,ii, jj) = -1._dp * vecMulVecT(3, invlatt(:,jj), invlatt(ii,:)) * 2._dp * PI
+                            end do
+                        end do
+                        ddlat(:,:,:) = i * dreclat(:,1,:,:) + j * dreclat(:,2,:,:) + k * dreclat(:,3,:,:)
+
+                        r = sum(dlat**2) ! r = k**2
+                        dr = 0._dp
+                        do ii=1,3
+                            dr(:,:) = dr(:,:) + 2._dp * dlat(ii) * ddlat(ii,:,:)
+                        end do
+                        if (r > cutoff**2) cycle
+                        factor = exp(-eta**2 * r / 2._dp) / r
+                        dfactor = -1._dp * factor * (eta**2 / 2._dp * r + 1._dp) * dr(:,:) / r
+                        do iat=1,nat
+                            kri = sum(dlat(:) * ats(:,iat))
+                            relat = matmul(invlat, ats(:,iat))
+                            datsi = 0._dp
+                            do ii=1,3
+                                datsi(ii,ii,:) = relat(:)
+                            end do
+                            dkri = 0._dp
+                            do ii=1,3
+                                dkri(:,:) = dkri(:,:) + dlat(ii) * datsi(ii,:,:) + ddlat(ii,:,:) * ats(ii,iat)
+                            end do
+                            do jat=iat,nat
+                                krj = sum(dlat(:) * ats(:,jat))
+                                relat = matmul(invlat, ats(:,jat))
+                                datsj = 0._dp
+                                do ii=1,3
+                                    datsj(ii,ii,:) = relat(:)
+                                end do
+                                dkrj = 0._dp
+                                do ii=1,3
+                                    dkrj(:,:) = dkrj(:,:) + dlat(ii) * datsj(ii,:,:) + ddlat(ii,:,:) * ats(ii,jat)
+                                end do
+                                !A(iat,jat) = A(iat,jat) +
+                                tmp = dfactor * (cos(kri) * cos(krj) + sin(kri) * sin(krj)) &
+                                    + factor * (-sin(kri) * dkri * cos(krj) - cos(kri) * sin(krj) * dkrj&
+                                                + cos(kri) * dkri * sin(krj) + sin(kri) * cos(krj) * dkrj)
+                                ! derivative wrt V
+                                tmp = (V * tmp - factor * (cos(kri) * cos(krj) + sin(kri) * sin(krj)) * dV) / V**2
+
+                                dAdLatQ(iat,:,:) = dAdLatQ(iat,:,:) + q(jat) * tmp
+                                if (jat /= iat) then
+                                    dAdLatQ(jat,:,:) = dAdLatQ(jat,:,:) + q(iat) * tmp
+                                end if
+                            end do
+                        end do
+                    end if
+                end do
+            end do
+        end do
+
+        !do iat=1,nat
+        !    do jat=iat+1,nat
+        !        A(jat, iat) = A(iat,jat)
+        !    end do
+        !end do
+
+        dAdLatQ = 4._dp * PI * dAdLatQ
+
+        !A = A / V * 4._dp * PI
+
+    end subroutine dAdLatQRecip
 end module ewaldSummation

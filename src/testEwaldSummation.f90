@@ -33,11 +33,11 @@ program testEwaldSummation
     real(dp) :: lat(3,3), dlat(3,3)
     real(dp) :: e1, f1(3,nat)
     real(dp) :: e2, f2(3,nat)
-    real(dp) :: eps(3,3), stressfd(3,3), stressan(3,3)
+    real(dp) :: eps(3,3), stressfd(3,3), stressan(3,3), dEdlat(3,3), stressmat(3,3)
     real(dp) :: fracc(3,nat), tm(3,3), unit(3,3), tmplat(3,3)
     real(dp) :: disp(3,nat)
     integer :: i, j
-    real(dp) :: A(nat, nat), dAdxyzq(nat, 3, nat)
+    real(dp) :: A(nat, nat), dAdxyzq(nat, 3, nat), dAdlatQ(nat, 3, 3)
     real(dp) :: zeros(nat)
 
     real(dp) :: atsMadelung(3,8), eMadelung, fMadelung(3,8), qMadelung(8), sigmaMadelung(8)
@@ -166,7 +166,7 @@ program testEwaldSummation
             stressfd(i,j) = (e2 - e1) / dx
         end do
     end do
-    stressfd = -1._dp / det3D(lat) * stressfd
+    stressfd = -1._dp / abs(det3D(lat)) * stressfd
 
     print*, 'Analytic stress tensor obtained from Ewald summation (A):'
     do i=1,3
@@ -191,6 +191,8 @@ program testEwaldSummation
 
     ! We can also calculate the energy using the A Matrix
     ! But be aware that this is less efficient and not as optimized
+    ! These routines are mostly usefull for charge equilibration and the calculation of energy and forces
+    ! in cases where charges depend on the atomic positions. (see 4G-HDNNP paper)
     call ewaldEnergy(nat, ats, lat, q, sigma, e1, f1)
     call eemMatrixEwald(nat, ats, lat, sigma, zeros, A)
     e2 = 0.5_dp * sum(q * matmul(A, q))
@@ -210,9 +212,21 @@ program testEwaldSummation
     do i=1,nat
         f2(:,:) = f2(:,:) + (-0.5_dp) * q(i) * dAdxyzq(i,:,:)
     end do
-    print*, 'The forces can also be calculated using the matrix dAdxyzq'
+    print*, 'The forces can also be calculated using the matrix dAdxyzQ'
     print*, 'Absolute force error to direct result:'
     print*, sum((f2-f1)**2)
+    print*, ''
+
+    ! We can also get the stress from dAdlatQ in the same way
+    call eemdAdlatTimesQEwald(nat, ats, lat, sigma, q, dAdlatQ)
+    dEdLat(:,:) = 0._dp
+    do i=1,nat
+        dEdlat(:,:) = dEdlat(:,:) + 0.5_dp * q(i) * dAdlatQ(i,:,:)
+    end do
+    call stressFromdEdLat(lat, dEdlat, stressmat)
+    print*, 'The stress can also be calculated using the matrix dAdlatQ'
+    print*, 'Absolute stress error to direct result:'
+    print*, sum((stressan-stressmat)**2)
     print*, ''
 
 end program testEwaldSummation
