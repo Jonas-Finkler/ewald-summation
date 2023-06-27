@@ -40,7 +40,7 @@ I would therefore appreciate if you cite our paper in case you use this code in 
 
 Ko, T. W., Finkler, J. A., Goedecker, S., & Behler, J. (2021).  
 __A fourth-generation high-dimensional neural network potential with accurate electrostatics including non-local charge transfer.__  
-_Nature communications_, 12(1), 1-11.
+_Nature communications_, 12:398
 
 
 
