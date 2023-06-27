@@ -114,7 +114,7 @@ contains
        ! real(dp) :: et,st
 
         eta = getOptimalEta(nat, lat)
-        eta = max(eta, maxval(sigma))
+        eta = max(eta, maxval(sigma) * 2._dp)
 
        ! call cpu_time(st)
         call ewaldSumReal(nat, ats, lat, q, sigma, eta, ereal, freal, stressreal)
