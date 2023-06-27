@@ -39,7 +39,7 @@ contains
 
 
     ! https://arxiv.org/pdf/1904.08875.pdf
-    ! https://aip.scitation.org/doi/pdf/10.1063/1.5053968
+    ! https://doi.org/10.1080/08927028808080944
     ! Be careful: in the first paper alpha != alpha_{RuNNer}
     ! alpha = 1 / (sqrt(2) eta)
     function getOptimalEta(nat, lat) result(eta)
